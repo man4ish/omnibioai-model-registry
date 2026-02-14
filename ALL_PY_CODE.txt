@@ -1,0 +1,941 @@
+
+# ==================================================
+# FILE: ./api.py
+# ==================================================
+# File: omnibioai_model_registry/api.py
+from __future__ import annotations
+import json
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any, Dict, Optional
+
+from .config import RegistryConfig, load_config
+from .errors import ModelNotFound, VersionAlreadyExists, ValidationError
+from .refs import parse_model_ref
+from .storage.localfs import LocalFS
+from .package import layout as L
+from .package.validate import validate_package_files
+from .package.manifest import write_sha256_manifest, verify_sha256_manifest
+from .audit.audit_log import PromotionEvent, append_promotion_event, now_utc_iso
+
+
+@dataclass
+class ModelRegistry:
+    cfg: RegistryConfig
+    backend: LocalFS  # v1 local; later swap to interface
+
+    @classmethod
+    def from_env(cls) -> "ModelRegistry":
+        cfg = load_config()
+        if cfg.backend != "localfs":
+            # keep strict for v1, add other backends later
+            raise ValueError(f"Unsupported backend '{cfg.backend}' (v1 supports only localfs).")
+        return cls(cfg=cfg, backend=LocalFS())
+
+    @property
+    def root(self) -> Path:
+        return Path(self.cfg.root).expanduser().resolve()
+
+    def _ensure_model_dirs(self, task: str, model_name: str) -> None:
+        self.backend.ensure_dirs(L.versions_root(self.root, task, model_name))
+        self.backend.ensure_dirs(L.aliases_root(self.root, task, model_name))
+        self.backend.ensure_dirs(L.audit_root(self.root, task, model_name))
+
+    def register_model(
+        self,
+        task: str,
+        model_name: str,
+        version: str,
+        artifacts_dir: str | Path,
+        metadata: Dict[str, Any],
+        set_alias: Optional[str] = "latest",
+        actor: Optional[str] = None,
+        reason: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """
+        Production-grade behaviors (v1):
+          - version immutability (no overwrite)
+          - validates required files
+          - writes model_meta.json + sha256sums.txt
+          - optionally updates alias + audit log
+        """
+        artifacts_dir = Path(artifacts_dir).resolve()
+        if not artifacts_dir.exists():
+            raise ValidationError(f"artifacts_dir does not exist: {artifacts_dir}")
+
+        # must include required artifacts except model_meta/manifest which we write here if missing
+        # allow artifacts_dir to already contain them; we still recompute manifest after copy
+        self._ensure_model_dirs(task, model_name)
+
+        dst = L.version_dir(self.root, task, model_name, version)
+        if self.backend.exists(dst):
+            raise VersionAlreadyExists(f"Model version already exists: {task}/{model_name}/{version}")
+
+        # Copy into immutable destination
+        self.backend.copy_tree(artifacts_dir, dst)
+
+        # Write/overwrite metadata in destination (source of truth)
+        meta = dict(metadata)
+        meta.setdefault("task", task)
+        meta.setdefault("model_name", model_name)
+        meta.setdefault("version", version)
+        meta.setdefault("created_at", now_utc_iso())
+        self.backend.atomic_write_text(dst / "model_meta.json", json.dumps(meta, indent=2) + "\n")
+
+        # Validate required files exist (after copy + meta write)
+        validate_package_files(dst)
+
+        # Write sha256 manifest for required files
+        hashes = write_sha256_manifest(dst, dst / "sha256sums.txt", include_files=L.REQUIRED_FILES)
+
+        # Optionally set alias (latest/staging/production)
+        if set_alias:
+            self.promote_model(task, model_name, set_alias, version, actor=actor, reason=reason or "register_model")
+
+        return {
+            "ok": True,
+            "task": task,
+            "model_name": model_name,
+            "version": version,
+            "package_path": str(dst),
+            "hashes": hashes,
+            "alias_set": set_alias,
+        }
+
+    def resolve_model(self, task: str, model_ref: str, verify: bool = True) -> Path:
+        """
+        model_ref: "<model_name>@<alias_or_version>"
+        - If selector matches an alias file, resolves to its version.
+        - Else assumes selector is a version directory.
+        """
+        ref = parse_model_ref(model_ref)
+        self._ensure_model_dirs(task, ref.model_name)
+
+        # Check alias first
+        alias_file = L.alias_path(self.root, task, ref.model_name, ref.selector)
+        if alias_file.exists():
+            data = json.loads(alias_file.read_text())
+            version = data["version"]
+        else:
+            version = ref.selector
+
+        vdir = L.version_dir(self.root, task, ref.model_name, version)
+        if not vdir.exists():
+            raise ModelNotFound(f"Model not found: task={task}, ref={model_ref} (resolved version={version})")
+
+        if verify or self.cfg.strict_verify:
+            validate_package_files(vdir)
+            verify_sha256_manifest(vdir, vdir / "sha256sums.txt")
+
+        return vdir
+
+    def promote_model(
+        self,
+        task: str,
+        model_name: str,
+        alias: str,
+        version: str,
+        actor: Optional[str] = None,
+        reason: Optional[str] = None,
+    ) -> None:
+        """
+        Updates aliases/<alias>.json and appends an audit log event.
+        """
+        self._ensure_model_dirs(task, model_name)
+        vdir = L.version_dir(self.root, task, model_name, version)
+        if not vdir.exists():
+            raise ModelNotFound(f"Cannot promote missing version: {task}/{model_name}/{version}")
+
+        payload = {
+            "task": task,
+            "model_name": model_name,
+            "alias": alias,
+            "version": version,
+            "updated_at": now_utc_iso(),
+            "actor": actor,
+            "reason": reason,
+        }
+        self.backend.atomic_write_text(L.alias_path(self.root, task, model_name, alias), json.dumps(payload, indent=2) + "\n")
+
+        ev = PromotionEvent(
+            task=task,
+            model_name=model_name,
+            alias=alias,
+            version=version,
+            actor=actor,
+            reason=reason,
+            ts_utc=payload["updated_at"],
+        )
+        append_promotion_event(L.promotions_log_path(self.root, task, model_name), ev)
+
+    def verify_model_ref(self, task: str, model_ref: str) -> None:
+        _ = self.resolve_model(task, model_ref, verify=True)
+
+
+# Convenience module-level functions (easy for plugins to call)
+
+def _default_registry() -> ModelRegistry:
+    return ModelRegistry.from_env()
+
+
+def register_model(*args, **kwargs) -> Dict[str, Any]:
+    return _default_registry().register_model(*args, **kwargs)
+
+
+def resolve_model(task: str, model_ref: str, verify: bool = True) -> str:
+    return str(_default_registry().resolve_model(task=task, model_ref=model_ref, verify=verify))
+
+
+def promote_model(*args, **kwargs) -> None:
+    return _default_registry().promote_model(*args, **kwargs)
+
+
+def verify_model_ref(task: str, model_ref: str) -> None:
+    return _default_registry().verify_model_ref(task=task, model_ref=model_ref)
+
+# ==================================================
+# FILE: ./audit/audit_log.py
+# ==================================================
+# File: omnibioai_model_registry/audit/audit_log.py
+from __future__ import annotations
+import json
+from dataclasses import dataclass
+from datetime import datetime, timezone
+from pathlib import Path
+
+
+@dataclass(frozen=True)
+class PromotionEvent:
+    task: str
+    model_name: str
+    alias: str
+    version: str
+    actor: str | None
+    reason: str | None
+    ts_utc: str
+
+
+def append_promotion_event(log_path: Path, event: PromotionEvent) -> None:
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    with log_path.open("a", encoding="utf-8") as f:
+        f.write(json.dumps(event.__dict__, ensure_ascii=False) + "\n")
+
+
+def now_utc_iso() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+# ==================================================
+# FILE: ./audit/__init__.py
+# ==================================================
+
+# ==================================================
+# FILE: ./cli/__init__.py
+# ==================================================
+
+# ==================================================
+# FILE: ./cli/main.py
+# ==================================================
+# File: omnibioai_model_registry/cli/main.py
+import argparse
+import json
+import sys
+from pathlib import Path
+
+from omnibioai_model_registry import (
+    ModelRegistry,
+    register_model,
+    resolve_model,
+    promote_model,
+    verify_model_ref,
+)
+from omnibioai_model_registry.errors import ModelRegistryError
+
+
+def cmd_list(args):
+    registry = ModelRegistry.from_env()
+    root = registry.root
+
+    task_root = root / "tasks" / args.task / "models"
+    if not task_root.exists():
+        print(f"No models found for task '{args.task}'")
+        return
+
+    for model_dir in sorted(task_root.iterdir()):
+        if model_dir.is_dir():
+            print(model_dir.name)
+
+
+def cmd_resolve(args):
+    path = resolve_model(args.task, args.model_ref)
+    print(path)
+
+
+def cmd_promote(args):
+    promote_model(
+        task=args.task,
+        model_name=args.model,
+        alias=args.alias,
+        version=args.version,
+        actor=args.actor,
+        reason=args.reason,
+    )
+    print(f"Promoted {args.model}@{args.version} → {args.alias}")
+
+
+def cmd_verify(args):
+    verify_model_ref(args.task, args.model_ref)
+    print("Integrity verification passed.")
+
+
+def _read_json_file(path: str | Path) -> dict:
+    p = Path(path)
+    if not p.exists():
+        raise FileNotFoundError(f"JSON file not found: {p}")
+    return json.loads(p.read_text())
+
+
+def cmd_register(args):
+    meta = {}
+    if args.metadata_json:
+        meta.update(_read_json_file(args.metadata_json))
+    if args.metadata_inline:
+        meta.update(json.loads(args.metadata_inline))
+
+    out = register_model(
+        task=args.task,
+        model_name=args.model,
+        version=args.version,
+        artifacts_dir=args.artifacts,
+        metadata=meta,
+        set_alias=args.set_alias,
+        actor=args.actor,
+        reason=args.reason,
+    )
+    if args.json:
+        print(json.dumps(out, indent=2))
+    else:
+        print(f"Registered: {out['task']}/{out['model_name']}/{out['version']}")
+        print(f"Path: {out['package_path']}")
+        if out.get("alias_set"):
+            print(f"Alias set: {out['alias_set']}")
+
+
+def cmd_show(args):
+    registry = ModelRegistry.from_env()
+    vdir = registry.resolve_model(task=args.task, model_ref=args.model_ref, verify=args.verify)
+
+    meta_path = vdir / "model_meta.json"
+    if not meta_path.exists():
+        print(f"model_meta.json not found in: {vdir}", file=sys.stderr)
+        sys.exit(1)
+
+    txt = meta_path.read_text()
+    meta = json.loads(txt)
+
+    if args.raw:
+        print(txt, end="" if txt.endswith("\n") else "\n")
+        return
+
+    if args.json:
+        print(json.dumps(meta, indent=2))
+        return
+
+    # Pretty minimal human view
+    print(f"Task:       {meta.get('task', args.task)}")
+    print(f"Model:      {meta.get('model_name')}")
+    print(f"Version:    {meta.get('version')}")
+    print(f"Created:    {meta.get('created_at')}")
+    print(f"Framework:  {meta.get('framework')}")
+    print(f"Model type: {meta.get('model_type')}")
+
+    prov = meta.get("provenance") or {}
+    if prov:
+        print("Provenance:")
+        if prov.get("git_commit"):
+            print(f"  git_commit: {prov.get('git_commit')}")
+        if prov.get("training_data_ref"):
+            print(f"  training_data_ref: {prov.get('training_data_ref')}")
+        if prov.get("trainer_version"):
+            print(f"  trainer_version: {prov.get('trainer_version')}")
+
+    print(f"Package dir: {vdir}")
+
+
+def build_parser():
+    parser = argparse.ArgumentParser(
+        prog="omr",
+        description="OmniBioAI Model Registry CLI",
+    )
+    subparsers = parser.add_subparsers(dest="command", required=True)
+
+    # list
+    p_list = subparsers.add_parser("list", help="List models for a task")
+    p_list.add_argument("--task", required=True, help="Task name")
+    p_list.set_defaults(func=cmd_list)
+
+    # resolve
+    p_resolve = subparsers.add_parser("resolve", help="Resolve model reference to a local path")
+    p_resolve.add_argument("--task", required=True, help="Task name")
+    p_resolve.add_argument("--ref", dest="model_ref", required=True, help="Model reference (model@alias_or_version)")
+    p_resolve.set_defaults(func=cmd_resolve)
+
+    # show
+    p_show = subparsers.add_parser("show", help="Show model metadata (model_meta.json)")
+    p_show.add_argument("--task", required=True, help="Task name")
+    p_show.add_argument("--ref", dest="model_ref", required=True, help="Model reference (model@alias_or_version)")
+    p_show.add_argument("--verify", action="store_true", help="Verify package integrity before showing")
+    p_show.add_argument("--json", action="store_true", help="Print formatted JSON metadata")
+    p_show.add_argument("--raw", action="store_true", help="Print raw model_meta.json")
+    p_show.set_defaults(func=cmd_show)
+
+    # register
+    p_register = subparsers.add_parser("register", help="Register a model package into the registry")
+    p_register.add_argument("--task", required=True, help="Task name")
+    p_register.add_argument("--model", required=True, help="Model name")
+    p_register.add_argument("--version", required=True, help="Version string (immutable)")
+    p_register.add_argument("--artifacts", required=True, help="Directory containing model package artifacts")
+    p_register.add_argument(
+        "--set-alias",
+        dest="set_alias",
+        default="latest",
+        help="Alias to set after register (default: latest). Use '' to skip.",
+    )
+    p_register.add_argument("--actor", default=None, help="Actor registering the model")
+    p_register.add_argument("--reason", default="cli register", help="Reason for registration")
+    p_register.add_argument("--metadata-json", default=None, help="Path to JSON file with metadata to merge")
+    p_register.add_argument("--metadata-inline", default=None, help="Inline JSON string metadata to merge")
+    p_register.add_argument("--json", action="store_true", help="Print JSON result")
+    p_register.set_defaults(func=cmd_register)
+
+    # promote
+    p_promote = subparsers.add_parser("promote", help="Promote model version to an alias")
+    p_promote.add_argument("--task", required=True, help="Task name")
+    p_promote.add_argument("--model", required=True, help="Model name")
+    p_promote.add_argument("--version", required=True, help="Version string")
+    p_promote.add_argument("--alias", required=True, help="Alias name (e.g. production)")
+    p_promote.add_argument("--actor", default=None, help="Actor performing promotion")
+    p_promote.add_argument("--reason", default=None, help="Reason for promotion")
+    p_promote.set_defaults(func=cmd_promote)
+
+    # verify
+    p_verify = subparsers.add_parser("verify", help="Verify model integrity")
+    p_verify.add_argument("--task", required=True, help="Task name")
+    p_verify.add_argument("--ref", dest="model_ref", required=True, help="Model reference")
+    p_verify.set_defaults(func=cmd_verify)
+
+    return parser
+
+
+def main():
+    parser = build_parser()
+    args = parser.parse_args()
+
+    # Handle special case: user wants no alias set
+    if getattr(args, "set_alias", None) == "":
+        args.set_alias = None
+
+    try:
+        args.func(args)
+    except ModelRegistryError as e:
+        print(f"[Registry Error] {e}", file=sys.stderr)
+        sys.exit(1)
+    except Exception as e:
+        print(f"[Unexpected Error] {e}", file=sys.stderr)
+        sys.exit(2)
+
+
+if __name__ == "__main__":
+    main()
+
+# ==================================================
+# FILE: ./config.py
+# ==================================================
+# File: omnibioai_model_registry/config.py
+import os
+from dataclasses import dataclass
+from .errors import RegistryNotConfigured
+
+
+@dataclass(frozen=True)
+class RegistryConfig:
+    root: str
+    backend: str = "localfs"  # future: s3, azure_blob
+    strict_verify: bool = True
+
+
+def load_config() -> RegistryConfig:
+    root = os.getenv("OMNIBIOAI_MODEL_REGISTRY_ROOT", "").strip()
+    if not root:
+        raise RegistryNotConfigured(
+            "OMNIBIOAI_MODEL_REGISTRY_ROOT is not set. "
+            "Example: export OMNIBIOAI_MODEL_REGISTRY_ROOT=~/Desktop/machine/local_registry/model_registry"
+        )
+    backend = os.getenv("OMNIBIOAI_MODEL_REGISTRY_BACKEND", "localfs").strip() or "localfs"
+    strict_verify = os.getenv("OMNIBIOAI_MODEL_REGISTRY_STRICT_VERIFY", "1").strip() not in {"0", "false", "False"}
+    return RegistryConfig(root=root, backend=backend, strict_verify=strict_verify)
+
+# ==================================================
+# FILE: ./errors.py
+# ==================================================
+# File: omnibioai_model_registry/errors.py
+class ModelRegistryError(Exception):
+    pass
+
+
+class RegistryNotConfigured(ModelRegistryError):
+    pass
+
+
+class ModelNotFound(ModelRegistryError):
+    pass
+
+
+class VersionAlreadyExists(ModelRegistryError):
+    pass
+
+
+class InvalidModelRef(ModelRegistryError):
+    pass
+
+
+class IntegrityError(ModelRegistryError):
+    pass
+
+
+class ValidationError(ModelRegistryError):
+    pass
+
+# ==================================================
+# FILE: ./__init__.py
+# ==================================================
+# File: omnibioai_model_registry/__init__.py
+from .api import ModelRegistry, register_model, resolve_model, promote_model, verify_model_ref
+
+__all__ = [
+    "ModelRegistry",
+    "register_model",
+    "resolve_model",
+    "promote_model",
+    "verify_model_ref",
+]
+
+# ==================================================
+# FILE: ./package/__init__.py
+# ==================================================
+
+# ==================================================
+# FILE: ./package/layout.py
+# ==================================================
+# File: omnibioai_model_registry/package/layout.py
+from __future__ import annotations
+from dataclasses import dataclass
+from pathlib import Path
+
+REQUIRED_FILES = [
+    "model.pt",
+    "model_genes.txt",
+    "label_map.json",
+    "model_meta.json",
+    "metrics.json",
+    "feature_schema.json",
+    "sha256sums.txt",
+]
+
+
+@dataclass(frozen=True)
+class PackagePaths:
+    version_dir: Path
+
+    @property
+    def meta_path(self) -> Path:
+        return self.version_dir / "model_meta.json"
+
+    @property
+    def manifest_path(self) -> Path:
+        return self.version_dir / "sha256sums.txt"
+
+
+def task_root(registry_root: Path, task: str) -> Path:
+    return registry_root / "tasks" / task
+
+
+def model_root(registry_root: Path, task: str, model_name: str) -> Path:
+    return task_root(registry_root, task) / "models" / model_name
+
+
+def versions_root(registry_root: Path, task: str, model_name: str) -> Path:
+    return model_root(registry_root, task, model_name) / "versions"
+
+
+def version_dir(registry_root: Path, task: str, model_name: str, version: str) -> Path:
+    return versions_root(registry_root, task, model_name) / version
+
+
+def aliases_root(registry_root: Path, task: str, model_name: str) -> Path:
+    return model_root(registry_root, task, model_name) / "aliases"
+
+
+def alias_path(registry_root: Path, task: str, model_name: str, alias: str) -> Path:
+    return aliases_root(registry_root, task, model_name) / f"{alias}.json"
+
+
+def audit_root(registry_root: Path, task: str, model_name: str) -> Path:
+    return model_root(registry_root, task, model_name) / "audit"
+
+
+def promotions_log_path(registry_root: Path, task: str, model_name: str) -> Path:
+    return audit_root(registry_root, task, model_name) / "promotions.jsonl"
+
+# ==================================================
+# FILE: ./package/manifest.py
+# ==================================================
+# File: omnibioai_model_registry/package/manifest.py
+from __future__ import annotations
+import hashlib
+from pathlib import Path
+from typing import Dict
+from ..errors import IntegrityError
+
+
+def sha256_file(path: Path, chunk_size: int = 1024 * 1024) -> str:
+    h = hashlib.sha256()
+    with path.open("rb") as f:
+        while True:
+            b = f.read(chunk_size)
+            if not b:
+                break
+            h.update(b)
+    return h.hexdigest()
+
+
+def write_sha256_manifest(dir_path: Path, manifest_path: Path, include_files: list[str]) -> Dict[str, str]:
+    """
+    Writes a manifest like:
+      <sha256>  model.pt
+    Returns mapping filename -> sha256
+    """
+    hashes: Dict[str, str] = {}
+    lines = []
+    for name in include_files:
+        p = dir_path / name
+        if not p.exists():
+            continue
+        digest = sha256_file(p)
+        hashes[name] = digest
+        lines.append(f"{digest}  {name}")
+    manifest_path.write_text("\n".join(lines) + ("\n" if lines else ""))
+    return hashes
+
+
+def read_sha256_manifest(manifest_path: Path) -> Dict[str, str]:
+    if not manifest_path.exists():
+        raise IntegrityError(f"Missing manifest: {manifest_path}")
+    out: Dict[str, str] = {}
+    for line in manifest_path.read_text().splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        # "<hash>  <filename>"
+        parts = line.split()
+        if len(parts) < 2:
+            continue
+        digest = parts[0]
+        name = parts[-1]
+        out[name] = digest
+    return out
+
+
+def verify_sha256_manifest(dir_path: Path, manifest_path: Path) -> None:
+    expected = read_sha256_manifest(manifest_path)
+    for name, exp_digest in expected.items():
+        p = dir_path / name
+        if not p.exists():
+            raise IntegrityError(f"Manifest expects file missing: {name}")
+        got = sha256_file(p)
+        if got != exp_digest:
+            raise IntegrityError(f"SHA256 mismatch for {name}: expected {exp_digest}, got {got}")
+
+# ==================================================
+# FILE: ./package/validate.py
+# ==================================================
+# File: omnibioai_model_registry/package/validate.py
+from __future__ import annotations
+from pathlib import Path
+from .layout import REQUIRED_FILES
+from ..errors import ValidationError
+
+
+def validate_package_files(version_dir: Path) -> None:
+    missing = [f for f in REQUIRED_FILES if not (version_dir / f).exists()]
+    if missing:
+        raise ValidationError(f"Model package missing required files: {missing}. In: {version_dir}")
+
+# ==================================================
+# FILE: ./refs.py
+# ==================================================
+# File: omnibioai_model_registry/refs.py
+from dataclasses import dataclass
+from .errors import InvalidModelRef
+
+
+@dataclass(frozen=True)
+class ModelRef:
+    model_name: str
+    selector: str  # alias or version
+
+
+def parse_model_ref(model_ref: str) -> ModelRef:
+    """
+    Accepts:
+      - "human_pbmc@production"
+      - "human_pbmc@2026-02-13_001"
+    """
+    if not model_ref or "@" not in model_ref:
+        raise InvalidModelRef(f"Invalid model_ref '{model_ref}'. Expected '<model_name>@<alias_or_version>'.")
+    model_name, selector = model_ref.split("@", 1)
+    model_name = model_name.strip()
+    selector = selector.strip()
+    if not model_name or not selector:
+        raise InvalidModelRef(f"Invalid model_ref '{model_ref}'. Expected '<model_name>@<alias_or_version>'.")
+    return ModelRef(model_name=model_name, selector=selector)
+
+# ==================================================
+# FILE: ./service/app/main.py
+# ==================================================
+from __future__ import annotations
+
+import json
+import os
+from pathlib import Path
+from typing import Any, Dict, Optional
+
+from fastapi import FastAPI, HTTPException, Query
+from pydantic import BaseModel, Field
+
+from omnibioai_model_registry import (
+    ModelRegistry,
+    register_model,
+    resolve_model,
+    promote_model,
+    verify_model_ref,
+)
+from omnibioai_model_registry.errors import ModelRegistryError
+
+APP_VERSION = "0.1.0"
+DEFAULT_PREFIX = "/v1"
+
+app = FastAPI(title="OmniBioAI Model Registry Service", version=APP_VERSION)
+
+
+# -------------------------
+# Request/Response models
+# -------------------------
+
+class RegisterRequest(BaseModel):
+    task: str
+    model_name: str
+    version: str
+    artifacts_dir: str = Field(..., description="Directory path accessible to the service container")
+    metadata: Dict[str, Any] = Field(default_factory=dict)
+    set_alias: Optional[str] = Field(default="latest", description="Alias to set after register. Use null to skip.")
+    actor: Optional[str] = None
+    reason: Optional[str] = "api register"
+
+
+class RegisterResponse(BaseModel):
+    ok: bool
+    task: str
+    model_name: str
+    version: str
+    package_path: str
+    alias_set: Optional[str] = None
+
+
+class PromoteRequest(BaseModel):
+    task: str
+    model_name: str
+    alias: str
+    version: str
+    actor: Optional[str] = None
+    reason: Optional[str] = None
+
+
+class VerifyRequest(BaseModel):
+    task: str
+    ref: str = Field(..., description="model@alias_or_version")
+
+
+class VerifyResponse(BaseModel):
+    ok: bool
+
+
+class ResolveResponse(BaseModel):
+    ok: bool
+    path: str
+
+
+class ShowResponse(BaseModel):
+    ok: bool
+    meta: Dict[str, Any]
+    package_dir: str
+
+
+# -------------------------
+# Helpers
+# -------------------------
+
+def _registry_root() -> str:
+    return os.getenv("OMNIBIOAI_MODEL_REGISTRY_ROOT", "").strip()
+
+
+def _http_error(status: int, msg: str):
+    raise HTTPException(status_code=status, detail=msg)
+
+
+def _handle_registry_error(e: Exception):
+    if isinstance(e, ModelRegistryError):
+        _http_error(400, str(e))
+    _http_error(500, str(e))
+
+
+# -------------------------
+# Endpoints
+# -------------------------
+
+@app.get("/health")
+def health():
+    root = _registry_root()
+    return {
+        "ok": True,
+        "service": "omnibioai-model-registry",
+        "version": APP_VERSION,
+        "registry_root_configured": bool(root),
+        "registry_root": root or None,
+    }
+
+
+@app.post(f"{DEFAULT_PREFIX}/register", response_model=RegisterResponse)
+def api_register(req: RegisterRequest):
+    try:
+        out = register_model(
+            task=req.task,
+            model_name=req.model_name,
+            version=req.version,
+            artifacts_dir=req.artifacts_dir,
+            metadata=req.metadata,
+            set_alias=req.set_alias,
+            actor=req.actor,
+            reason=req.reason,
+        )
+        return RegisterResponse(
+            ok=True,
+            task=out["task"],
+            model_name=out["model_name"],
+            version=out["version"],
+            package_path=out["package_path"],
+            alias_set=out.get("alias_set"),
+        )
+    except Exception as e:
+        _handle_registry_error(e)
+
+
+@app.get(f"{DEFAULT_PREFIX}/resolve", response_model=ResolveResponse)
+def api_resolve(
+    task: str = Query(...),
+    ref: str = Query(..., description="model@alias_or_version"),
+    verify: bool = Query(True),
+):
+    try:
+        path = resolve_model(task=task, model_ref=ref, verify=verify)
+        return ResolveResponse(ok=True, path=path)
+    except Exception as e:
+        _handle_registry_error(e)
+
+
+@app.post(f"{DEFAULT_PREFIX}/promote")
+def api_promote(req: PromoteRequest):
+    try:
+        promote_model(
+            task=req.task,
+            model_name=req.model_name,
+            alias=req.alias,
+            version=req.version,
+            actor=req.actor,
+            reason=req.reason,
+        )
+        return {"ok": True}
+    except Exception as e:
+        _handle_registry_error(e)
+
+
+@app.post(f"{DEFAULT_PREFIX}/verify", response_model=VerifyResponse)
+def api_verify(req: VerifyRequest):
+    try:
+        verify_model_ref(task=req.task, model_ref=req.ref)
+        return VerifyResponse(ok=True)
+    except Exception as e:
+        _handle_registry_error(e)
+
+
+@app.get(f"{DEFAULT_PREFIX}/show", response_model=ShowResponse)
+def api_show(
+    task: str = Query(...),
+    ref: str = Query(..., description="model@alias_or_version"),
+    verify: bool = Query(False),
+):
+    try:
+        registry = ModelRegistry.from_env()
+        vdir = registry.resolve_model(task=task, model_ref=ref, verify=verify)
+        meta_path = Path(vdir) / "model_meta.json"
+        if not meta_path.exists():
+            _http_error(404, f"model_meta.json not found in {vdir}")
+
+        meta = json.loads(meta_path.read_text())
+        return ShowResponse(ok=True, meta=meta, package_dir=str(vdir))
+    except Exception as e:
+        _handle_registry_error(e)
+
+# ==================================================
+# FILE: ./storage/base.py
+# ==================================================
+
+# ==================================================
+# FILE: ./storage/__init__.py
+# ==================================================
+
+# ==================================================
+# FILE: ./storage/localfs.py
+# ==================================================
+# File: omnibioai_model_registry/storage/localfs.py
+from __future__ import annotations
+import os
+import shutil
+import tempfile
+from pathlib import Path
+from .base import StorageBackend
+
+
+class LocalFS(StorageBackend):
+    def ensure_dirs(self, path: Path) -> None:
+        path.mkdir(parents=True, exist_ok=True)
+
+    def exists(self, path: Path) -> bool:
+        return path.exists()
+
+    def copy_tree(self, src_dir: Path, dst_dir: Path) -> None:
+        # shutil.copytree requires dst doesn't exist
+        shutil.copytree(src_dir, dst_dir)
+
+    def atomic_write_text(self, path: Path, text: str) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        fd, tmp = tempfile.mkstemp(prefix=path.name + ".", dir=str(path.parent))
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                f.write(text)
+            os.replace(tmp, path)
+        finally:
+            try:
+                if os.path.exists(tmp):
+                    os.unlink(tmp)
+            except Exception:
+                pass

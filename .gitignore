@@ -1,0 +1,75 @@
+# ===============================
+# Python
+# ===============================
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# ===============================
+# Packaging / Distribution
+# ===============================
+build/
+dist/
+*.egg-info/
+.eggs/
+*.egg
+MANIFEST
+
+# Editable installs
+pip-wheel-metadata/
+
+# ===============================
+# Virtual environments
+# ===============================
+.venv/
+venv/
+env/
+ENV/
+.env
+.env.*
+
+# ===============================
+# Testing / Coverage
+# ===============================
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.mypy_cache/
+.ruff_cache/
+
+# ===============================
+# IDEs / Editors
+# ===============================
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# ===============================
+# Logs
+# ===============================
+*.log
+
+# ===============================
+# Local registry data (IMPORTANT)
+# ===============================
+# Never commit real model registry artifacts
+local_registry/
+registry_root/
+model_registry/
+
+# If you ever keep sample model packages locally
+/tmp_model_pkg/
+model_pkg/
+
+# ===============================
+# OS files
+# ===============================
+Thumbs.db
+

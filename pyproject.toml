@@ -53,8 +53,13 @@ dev = [
 [project.scripts]
 omr = "omnibioai_model_registry.cli.main:main"
 
+# ✅ Correct package discovery (includes subpackages)
 [tool.setuptools]
-packages = ["omnibioai_model_registry"]
+include-package-data = true
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["omnibioai_model_registry*"]
 
 [tool.black]
 line-length = 88
@@ -67,4 +72,3 @@ target-version = "py310"
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q"
-

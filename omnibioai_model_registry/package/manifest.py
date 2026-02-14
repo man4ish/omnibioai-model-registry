@@ -22,18 +22,27 @@ def write_sha256_manifest(dir_path: Path, manifest_path: Path, include_files: li
     Writes a manifest like:
       <sha256>  model.pt
     Returns mapping filename -> sha256
+    NOTE: We never hash the manifest file itself (sha256sums.txt) to avoid self-referential mismatch.
     """
     hashes: Dict[str, str] = {}
     lines = []
+    manifest_name = Path(manifest_path).name  # usually "sha256sums.txt"
+
     for name in include_files:
+        # Never include the manifest itself
+        if name == manifest_name:
+            continue
+
         p = dir_path / name
         if not p.exists():
             continue
         digest = sha256_file(p)
         hashes[name] = digest
         lines.append(f"{digest}  {name}")
+
     manifest_path.write_text("\n".join(lines) + ("\n" if lines else ""))
     return hashes
+
 
 
 def read_sha256_manifest(manifest_path: Path) -> Dict[str, str]:

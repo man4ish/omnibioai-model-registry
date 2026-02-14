@@ -13,6 +13,14 @@ REQUIRED_FILES = [
     "sha256sums.txt",
 ]
 
+HASHED_FILES = [
+    "model.pt",
+    "model_genes.txt",
+    "label_map.json",
+    "model_meta.json",
+    "metrics.json",
+    "feature_schema.json",
+]
 
 @dataclass(frozen=True)
 class PackagePaths:
