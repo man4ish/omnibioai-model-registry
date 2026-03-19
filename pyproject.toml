@@ -10,9 +10,7 @@ readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
 
-authors = [
-  { name = "Manish Kumar" }
-]
+authors = [{ name = "Manish Kumar" }]
 
 keywords = [
   "model-registry",
@@ -21,7 +19,7 @@ keywords = [
   "ai",
   "machine-learning",
   "artifact-management",
-  "reproducibility"
+  "reproducibility",
 ]
 
 classifiers = [
@@ -33,10 +31,11 @@ classifiers = [
   "Programming Language :: Python :: 3.10",
   "Programming Language :: Python :: 3.11",
   "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
   "Operating System :: OS Independent",
   "Topic :: Scientific/Engineering :: Artificial Intelligence",
   "Topic :: Scientific/Engineering :: Bio-Informatics",
-  "Topic :: Software Development :: Libraries"
+  "Topic :: Software Development :: Libraries",
 ]
 
 dependencies = [
@@ -49,20 +48,18 @@ dependencies = [
   "boto3>=1.34.0",
 ]
 
-
 [project.optional-dependencies]
 dev = [
   "pytest>=7.0",
   "pytest-cov>=4.0",
-  "black>=23.0",
+  "black==26.3.1",
   "ruff>=0.1.0",
-  "mypy>=1.0"
+  "mypy>=1.0",
 ]
 
 [project.scripts]
 omr = "omnibioai_model_registry.cli.main:main"
 
-# ✅ Correct package discovery (includes subpackages)
 [tool.setuptools]
 include-package-data = true
 
@@ -72,12 +69,16 @@ include = ["omnibioai_model_registry*"]
 
 [tool.black]
 line-length = 88
-target-version = ["py310"]
+target-version = ["py310", "py311", "py312", "py313"]
 
 [tool.ruff]
 line-length = 88
 target-version = "py310"
 
+[tool.ruff.lint]
+select = ["E", "F", "I"]
+ignore = ["E501"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "-q"
+addopts = "-q --cov=omnibioai_model_registry --cov-report=term-missing --cov-fail-under=95"
