@@ -17,7 +17,9 @@ def sha256_file(path: Path, chunk_size: int = 1024 * 1024) -> str:
     return h.hexdigest()
 
 
-def write_sha256_manifest(dir_path: Path, manifest_path: Path, include_files: list[str]) -> Dict[str, str]:
+def write_sha256_manifest(
+    dir_path: Path, manifest_path: Path, include_files: list[str]
+) -> Dict[str, str]:
     """
     Writes a manifest like:
       <sha256>  model.pt
@@ -42,7 +44,6 @@ def write_sha256_manifest(dir_path: Path, manifest_path: Path, include_files: li
 
     manifest_path.write_text("\n".join(lines) + ("\n" if lines else ""))
     return hashes
-
 
 
 def read_sha256_manifest(manifest_path: Path) -> Dict[str, str]:
@@ -71,4 +72,6 @@ def verify_sha256_manifest(dir_path: Path, manifest_path: Path) -> None:
             raise IntegrityError(f"Manifest expects file missing: {name}")
         got = sha256_file(p)
         if got != exp_digest:
-            raise IntegrityError(f"SHA256 mismatch for {name}: expected {exp_digest}, got {got}")
+            raise IntegrityError(
+                f"SHA256 mismatch for {name}: expected {exp_digest}, got {got}"
+            )

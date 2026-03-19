@@ -25,7 +25,9 @@ class ModelRegistry:
         cfg = load_config()
         if cfg.backend != "localfs":
             # keep strict for v1, add other backends later
-            raise ValueError(f"Unsupported backend '{cfg.backend}' (v1 supports only localfs).")
+            raise ValueError(
+                f"Unsupported backend '{cfg.backend}' (v1 supports only localfs)."
+            )
         return cls(cfg=cfg, backend=LocalFS())
 
     @property
@@ -65,7 +67,9 @@ class ModelRegistry:
 
         dst = L.version_dir(self.root, task, model_name, version)
         if self.backend.exists(dst):
-            raise VersionAlreadyExists(f"Model version already exists: {task}/{model_name}/{version}")
+            raise VersionAlreadyExists(
+                f"Model version already exists: {task}/{model_name}/{version}"
+            )
 
         # Copy into immutable destination
         self.backend.copy_tree(artifacts_dir, dst)
@@ -76,17 +80,28 @@ class ModelRegistry:
         meta.setdefault("model_name", model_name)
         meta.setdefault("version", version)
         meta.setdefault("created_at", now_utc_iso())
-        self.backend.atomic_write_text(dst / "model_meta.json", json.dumps(meta, indent=2) + "\n")
+        self.backend.atomic_write_text(
+            dst / "model_meta.json", json.dumps(meta, indent=2) + "\n"
+        )
 
         # Validate required files exist (after copy + meta write)
         validate_package_files(dst)
 
         # Write sha256 manifest for required files
-        hashes = write_sha256_manifest(dst, dst / "sha256sums.txt", include_files=L.REQUIRED_FILES)
+        hashes = write_sha256_manifest(
+            dst, dst / "sha256sums.txt", include_files=L.REQUIRED_FILES
+        )
 
         # Optionally set alias (latest/staging/production)
         if set_alias:
-            self.promote_model(task, model_name, set_alias, version, actor=actor, reason=reason or "register_model")
+            self.promote_model(
+                task,
+                model_name,
+                set_alias,
+                version,
+                actor=actor,
+                reason=reason or "register_model",
+            )
 
         return {
             "ok": True,
@@ -117,7 +132,9 @@ class ModelRegistry:
 
         vdir = L.version_dir(self.root, task, ref.model_name, version)
         if not vdir.exists():
-            raise ModelNotFound(f"Model not found: task={task}, ref={model_ref} (resolved version={version})")
+            raise ModelNotFound(
+                f"Model not found: task={task}, ref={model_ref} (resolved version={version})"
+            )
 
         if verify or self.cfg.strict_verify:
             validate_package_files(vdir)
@@ -140,7 +157,9 @@ class ModelRegistry:
         self._ensure_model_dirs(task, model_name)
         vdir = L.version_dir(self.root, task, model_name, version)
         if not vdir.exists():
-            raise ModelNotFound(f"Cannot promote missing version: {task}/{model_name}/{version}")
+            raise ModelNotFound(
+                f"Cannot promote missing version: {task}/{model_name}/{version}"
+            )
 
         payload = {
             "task": task,
@@ -151,7 +170,10 @@ class ModelRegistry:
             "actor": actor,
             "reason": reason,
         }
-        self.backend.atomic_write_text(L.alias_path(self.root, task, model_name, alias), json.dumps(payload, indent=2) + "\n")
+        self.backend.atomic_write_text(
+            L.alias_path(self.root, task, model_name, alias),
+            json.dumps(payload, indent=2) + "\n",
+        )
 
         ev = PromotionEvent(
             task=task,
@@ -170,6 +192,7 @@ class ModelRegistry:
 
 # Convenience module-level functions (easy for plugins to call)
 
+
 def _default_registry() -> ModelRegistry:
     return ModelRegistry.from_env()
 
@@ -179,7 +202,9 @@ def register_model(*args, **kwargs) -> Dict[str, Any]:
 
 
 def resolve_model(task: str, model_ref: str, verify: bool = True) -> str:
-    return str(_default_registry().resolve_model(task=task, model_ref=model_ref, verify=verify))
+    return str(
+        _default_registry().resolve_model(task=task, model_ref=model_ref, verify=verify)
+    )
 
 
 def promote_model(*args, **kwargs) -> None:

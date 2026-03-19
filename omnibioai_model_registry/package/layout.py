@@ -22,6 +22,7 @@ HASHED_FILES = [
     "feature_schema.json",
 ]
 
+
 @dataclass(frozen=True)
 class PackagePaths:
     version_dir: Path

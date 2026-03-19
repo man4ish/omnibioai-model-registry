@@ -4,6 +4,7 @@ tests/test_model_registry.py
 Comprehensive tests for omnibioai_model_registry — target 95%+ coverage.
 Covers: api, config, refs, errors, package/*, storage/*, audit/*, cli/main
 """
+
 from __future__ import annotations
 
 import json
@@ -27,6 +28,7 @@ from omnibioai_model_registry.package.layout import REQUIRED_FILES
 # ============================================================
 # Shared helpers
 # ============================================================
+
 
 def _make_minimal_package(dir_path: Path, *, meta: dict | None = None) -> None:
     dir_path.mkdir(parents=True, exist_ok=True)
@@ -67,9 +69,14 @@ def registered_reg(env_root: Path, tmp_path: Path) -> tuple[ModelRegistry, Path]
     _make_minimal_package(src)
     r = ModelRegistry.from_env()
     r.register_model(
-        task="t", model_name="m", version="v1",
-        artifacts_dir=src, metadata={}, set_alias="latest",
-        actor="manish", reason="test",
+        task="t",
+        model_name="m",
+        version="v1",
+        artifacts_dir=src,
+        metadata={},
+        set_alias="latest",
+        actor="manish",
+        reason="test",
     )
     return r, env_root
 
@@ -78,13 +85,17 @@ def registered_reg(env_root: Path, tmp_path: Path) -> tuple[ModelRegistry, Path]
 # Original regression tests
 # ============================================================
 
+
 def test_register_creates_version_dir_and_metadata(env_root: Path, tmp_path: Path):
     src = tmp_path / "pkg_src"
     _make_minimal_package(src, meta={"framework": "test"})
     reg = ModelRegistry.from_env()
     out = reg.register_model(
-        task="celltype_sc", model_name="human_pbmc", version="2026-02-14_001",
-        artifacts_dir=src, metadata={"framework": "sklearn", "model_type": "lr"},
+        task="celltype_sc",
+        model_name="human_pbmc",
+        version="2026-02-14_001",
+        artifacts_dir=src,
+        metadata={"framework": "sklearn", "model_type": "lr"},
         set_alias=None,
     )
     assert out["ok"] is True
@@ -104,20 +115,39 @@ def test_register_is_immutable(env_root: Path, tmp_path: Path):
     src = tmp_path / "pkg_src"
     _make_minimal_package(src)
     reg = ModelRegistry.from_env()
-    reg.register_model(task="t", model_name="m", version="v1",
-                       artifacts_dir=src, metadata={}, set_alias=None)
+    reg.register_model(
+        task="t",
+        model_name="m",
+        version="v1",
+        artifacts_dir=src,
+        metadata={},
+        set_alias=None,
+    )
     with pytest.raises(VersionAlreadyExists):
-        reg.register_model(task="t", model_name="m", version="v1",
-                           artifacts_dir=src, metadata={}, set_alias=None)
+        reg.register_model(
+            task="t",
+            model_name="m",
+            version="v1",
+            artifacts_dir=src,
+            metadata={},
+            set_alias=None,
+        )
 
 
 def test_resolve_by_version_and_alias(env_root: Path, tmp_path: Path):
     src = tmp_path / "pkg_src"
     _make_minimal_package(src)
     reg = ModelRegistry.from_env()
-    reg.register_model(task="t", model_name="m", version="v1",
-                       artifacts_dir=src, metadata={}, set_alias="latest",
-                       actor="manish", reason="unit test")
+    reg.register_model(
+        task="t",
+        model_name="m",
+        version="v1",
+        artifacts_dir=src,
+        metadata={},
+        set_alias="latest",
+        actor="manish",
+        reason="unit test",
+    )
     vdir1 = reg.resolve_model(task="t", model_ref="m@v1", verify=True)
     vdir2 = reg.resolve_model(task="t", model_ref="m@latest", verify=True)
     assert str(vdir2) == str(vdir1)
@@ -132,10 +162,22 @@ def test_promote_writes_audit_log(env_root: Path, tmp_path: Path):
     src = tmp_path / "pkg_src"
     _make_minimal_package(src)
     reg = ModelRegistry.from_env()
-    reg.register_model(task="t", model_name="m", version="v1",
-                       artifacts_dir=src, metadata={}, set_alias=None)
-    reg.promote_model(task="t", model_name="m", alias="production",
-                      version="v1", actor="x", reason="y")
+    reg.register_model(
+        task="t",
+        model_name="m",
+        version="v1",
+        artifacts_dir=src,
+        metadata={},
+        set_alias=None,
+    )
+    reg.promote_model(
+        task="t",
+        model_name="m",
+        alias="production",
+        version="v1",
+        actor="x",
+        reason="y",
+    )
     log_path = env_root / "tasks" / "t" / "models" / "m" / "audit" / "promotions.jsonl"
     assert log_path.exists()
     lines = [ln for ln in log_path.read_text().splitlines() if ln.strip()]
@@ -155,13 +197,19 @@ def test_resolve_missing_raises(env_root: Path):
 def test_register_fails_if_artifacts_dir_missing(env_root: Path, tmp_path: Path):
     reg = ModelRegistry.from_env()
     with pytest.raises(ValidationError):
-        reg.register_model(task="t", model_name="m", version="v1",
-                           artifacts_dir=tmp_path / "does_not_exist", metadata={})
+        reg.register_model(
+            task="t",
+            model_name="m",
+            version="v1",
+            artifacts_dir=tmp_path / "does_not_exist",
+            metadata={},
+        )
 
 
 # ============================================================
 # config.py
 # ============================================================
+
 
 class TestConfig:
 
@@ -170,6 +218,7 @@ class TestConfig:
         monkeypatch.setenv("OMNIBIOAI_MODEL_REGISTRY_BACKEND", "localfs")
         monkeypatch.setenv("OMNIBIOAI_MODEL_REGISTRY_STRICT_VERIFY", "1")
         from omnibioai_model_registry.config import load_config
+
         cfg = load_config()
         assert cfg.root == "/tmp/reg"
         assert cfg.backend == "localfs"
@@ -179,6 +228,7 @@ class TestConfig:
         monkeypatch.setenv("OMNIBIOAI_MODEL_REGISTRY_ROOT", "/tmp/reg")
         monkeypatch.setenv("OMNIBIOAI_MODEL_REGISTRY_STRICT_VERIFY", "0")
         from omnibioai_model_registry.config import load_config
+
         cfg = load_config()
         assert cfg.strict_verify is False
 
@@ -186,6 +236,7 @@ class TestConfig:
         monkeypatch.setenv("OMNIBIOAI_MODEL_REGISTRY_ROOT", "/tmp/reg")
         monkeypatch.setenv("OMNIBIOAI_MODEL_REGISTRY_STRICT_VERIFY", "false")
         from omnibioai_model_registry.config import load_config
+
         cfg = load_config()
         assert cfg.strict_verify is False
 
@@ -193,6 +244,7 @@ class TestConfig:
         monkeypatch.delenv("OMNIBIOAI_MODEL_REGISTRY_ROOT", raising=False)
         monkeypatch.delenv("REGISTRY_ROOT", raising=False)
         from omnibioai_model_registry.config import load_config
+
         with pytest.raises(RegistryNotConfigured):
             load_config()
 
@@ -201,6 +253,7 @@ class TestConfig:
         monkeypatch.delenv("OMNIBIOAI_MODEL_REGISTRY_ROOT", raising=False)
         monkeypatch.setenv("REGISTRY_ROOT", "/tmp/fallback")
         from omnibioai_model_registry.config import load_config
+
         cfg = load_config()
         assert cfg.root == "/tmp/fallback"
 
@@ -208,6 +261,7 @@ class TestConfig:
         monkeypatch.setenv("OMNIBIOAI_MODEL_REGISTRY_ROOT", "/tmp/reg")
         monkeypatch.delenv("OMNIBIOAI_MODEL_REGISTRY_BACKEND", raising=False)
         from omnibioai_model_registry.config import load_config
+
         cfg = load_config()
         assert cfg.backend == "localfs"
 
@@ -216,16 +270,19 @@ class TestConfig:
 # refs.py
 # ============================================================
 
+
 class TestRefs:
 
     def test_parse_valid_ref(self):
         from omnibioai_model_registry.refs import parse_model_ref
+
         ref = parse_model_ref("human_pbmc@production")
         assert ref.model_name == "human_pbmc"
         assert ref.selector == "production"
 
     def test_parse_version_ref(self):
         from omnibioai_model_registry.refs import parse_model_ref
+
         ref = parse_model_ref("human_pbmc@2026-02-13_001")
         assert ref.model_name == "human_pbmc"
         assert ref.selector == "2026-02-13_001"
@@ -233,23 +290,27 @@ class TestRefs:
     def test_parse_missing_at_raises(self):
         """Covers line 19: no '@' in model_ref."""
         from omnibioai_model_registry.refs import parse_model_ref
+
         with pytest.raises(InvalidModelRef):
             parse_model_ref("human_pbmc_no_at")
 
     def test_parse_empty_ref_raises(self):
         from omnibioai_model_registry.refs import parse_model_ref
+
         with pytest.raises(InvalidModelRef):
             parse_model_ref("")
 
     def test_parse_empty_model_name_raises(self):
         """Covers line 24: empty model_name after split."""
         from omnibioai_model_registry.refs import parse_model_ref
+
         with pytest.raises(InvalidModelRef):
             parse_model_ref("@production")
 
     def test_parse_empty_selector_raises(self):
         """Covers line 24: empty selector after split."""
         from omnibioai_model_registry.refs import parse_model_ref
+
         with pytest.raises(InvalidModelRef):
             parse_model_ref("human_pbmc@")
 
@@ -258,15 +319,27 @@ class TestRefs:
 # errors.py
 # ============================================================
 
+
 class TestErrors:
 
     def test_all_error_types(self):
         from omnibioai_model_registry.errors import (
-            ModelNotFound, VersionAlreadyExists, ValidationError,
-            IntegrityError, InvalidModelRef, RegistryNotConfigured,
+            ModelNotFound,
+            VersionAlreadyExists,
+            ValidationError,
+            IntegrityError,
+            InvalidModelRef,
+            RegistryNotConfigured,
         )
-        for cls in [ModelNotFound, VersionAlreadyExists, ValidationError,
-                    IntegrityError, InvalidModelRef, RegistryNotConfigured]:
+
+        for cls in [
+            ModelNotFound,
+            VersionAlreadyExists,
+            ValidationError,
+            IntegrityError,
+            InvalidModelRef,
+            RegistryNotConfigured,
+        ]:
             e = cls("test message")
             assert "test message" in str(e)
             assert isinstance(e, Exception)
@@ -276,57 +349,68 @@ class TestErrors:
 # package/layout.py
 # ============================================================
 
+
 class TestLayout:
 
     def test_required_files_list(self):
         from omnibioai_model_registry.package.layout import REQUIRED_FILES
+
         assert "model.pt" in REQUIRED_FILES
         assert "sha256sums.txt" in REQUIRED_FILES
 
     def test_task_root(self, tmp_path):
         from omnibioai_model_registry.package.layout import task_root
+
         p = task_root(tmp_path, "celltype_sc")
         assert str(p).endswith("tasks/celltype_sc")
 
     def test_model_root(self, tmp_path):
         from omnibioai_model_registry.package.layout import model_root
+
         p = model_root(tmp_path, "celltype_sc", "human_pbmc")
         assert "models/human_pbmc" in str(p)
 
     def test_version_dir(self, tmp_path):
         from omnibioai_model_registry.package.layout import version_dir
+
         p = version_dir(tmp_path, "t", "m", "v1")
         assert p.name == "v1"
 
     def test_alias_path(self, tmp_path):
         from omnibioai_model_registry.package.layout import alias_path
+
         p = alias_path(tmp_path, "t", "m", "latest")
         assert p.name == "latest.json"
 
     def test_audit_root(self, tmp_path):
         from omnibioai_model_registry.package.layout import audit_root
+
         p = audit_root(tmp_path, "t", "m")
         assert p.name == "audit"
 
     def test_promotions_log_path(self, tmp_path):
         from omnibioai_model_registry.package.layout import promotions_log_path
+
         p = promotions_log_path(tmp_path, "t", "m")
         assert p.name == "promotions.jsonl"
 
     def test_package_paths_meta(self, tmp_path):
         """Covers lines 31, 35: PackagePaths properties."""
         from omnibioai_model_registry.package.layout import PackagePaths
+
         pp = PackagePaths(version_dir=tmp_path)
         assert pp.meta_path == tmp_path / "model_meta.json"
         assert pp.manifest_path == tmp_path / "sha256sums.txt"
 
     def test_versions_root(self, tmp_path):
         from omnibioai_model_registry.package.layout import versions_root
+
         p = versions_root(tmp_path, "t", "m")
         assert p.name == "versions"
 
     def test_aliases_root(self, tmp_path):
         from omnibioai_model_registry.package.layout import aliases_root
+
         p = aliases_root(tmp_path, "t", "m")
         assert p.name == "aliases"
 
@@ -335,10 +419,12 @@ class TestLayout:
 # package/validate.py
 # ============================================================
 
+
 class TestValidate:
 
     def test_validate_passes_with_all_files(self, tmp_path):
         from omnibioai_model_registry.package.validate import validate_package_files
+
         for f in REQUIRED_FILES:
             (tmp_path / f).write_text("x")
         validate_package_files(tmp_path)
@@ -346,6 +432,7 @@ class TestValidate:
     def test_validate_fails_with_missing_file(self, tmp_path):
         """Covers line 11: raises ValidationError."""
         from omnibioai_model_registry.package.validate import validate_package_files
+
         for f in REQUIRED_FILES[:-1]:
             (tmp_path / f).write_text("x")
         with pytest.raises(ValidationError) as exc_info:
@@ -357,10 +444,12 @@ class TestValidate:
 # package/manifest.py
 # ============================================================
 
+
 class TestManifest:
 
     def test_sha256_file(self, tmp_path):
         from omnibioai_model_registry.package.manifest import sha256_file
+
         f = tmp_path / "test.bin"
         f.write_bytes(b"hello world")
         digest = sha256_file(f)
@@ -369,14 +458,15 @@ class TestManifest:
 
     def test_write_and_read_manifest(self, tmp_path):
         from omnibioai_model_registry.package.manifest import (
-            write_sha256_manifest, read_sha256_manifest
+            write_sha256_manifest,
+            read_sha256_manifest,
         )
+
         (tmp_path / "model.pt").write_bytes(b"weights")
         (tmp_path / "model_meta.json").write_text("{}")
         manifest_path = tmp_path / "sha256sums.txt"
         hashes = write_sha256_manifest(
-            tmp_path, manifest_path,
-            include_files=["model.pt", "model_meta.json"]
+            tmp_path, manifest_path, include_files=["model.pt", "model_meta.json"]
         )
         assert "model.pt" in hashes
         assert "model_meta.json" in hashes
@@ -386,11 +476,11 @@ class TestManifest:
     def test_write_manifest_skips_manifest_itself(self, tmp_path):
         """Covers line 38: skips sha256sums.txt from being hashed."""
         from omnibioai_model_registry.package.manifest import write_sha256_manifest
+
         (tmp_path / "model.pt").write_bytes(b"weights")
         manifest_path = tmp_path / "sha256sums.txt"
         hashes = write_sha256_manifest(
-            tmp_path, manifest_path,
-            include_files=["model.pt", "sha256sums.txt"]
+            tmp_path, manifest_path, include_files=["model.pt", "sha256sums.txt"]
         )
         assert "sha256sums.txt" not in hashes
         assert "model.pt" in hashes
@@ -398,11 +488,11 @@ class TestManifest:
     def test_write_manifest_skips_missing_files(self, tmp_path):
         """Covers line 50: skips files that don't exist."""
         from omnibioai_model_registry.package.manifest import write_sha256_manifest
+
         (tmp_path / "model.pt").write_bytes(b"weights")
         manifest_path = tmp_path / "sha256sums.txt"
         hashes = write_sha256_manifest(
-            tmp_path, manifest_path,
-            include_files=["model.pt", "nonexistent.bin"]
+            tmp_path, manifest_path, include_files=["model.pt", "nonexistent.bin"]
         )
         assert "nonexistent.bin" not in hashes
         assert "model.pt" in hashes
@@ -410,6 +500,7 @@ class TestManifest:
     def test_write_manifest_empty_files(self, tmp_path):
         """Covers line 59: empty lines list → empty manifest."""
         from omnibioai_model_registry.package.manifest import write_sha256_manifest
+
         manifest_path = tmp_path / "sha256sums.txt"
         hashes = write_sha256_manifest(tmp_path, manifest_path, include_files=[])
         assert hashes == {}
@@ -418,12 +509,14 @@ class TestManifest:
     def test_read_manifest_missing_raises(self, tmp_path):
         """Covers line 55: missing manifest raises IntegrityError."""
         from omnibioai_model_registry.package.manifest import read_sha256_manifest
+
         with pytest.raises(IntegrityError):
             read_sha256_manifest(tmp_path / "nonexistent.txt")
 
     def test_read_manifest_skips_short_lines(self, tmp_path):
         """Covers line 71: skips lines with < 2 parts."""
         from omnibioai_model_registry.package.manifest import read_sha256_manifest
+
         manifest_path = tmp_path / "sha256sums.txt"
         manifest_path.write_text("justoneword\nabc123  file.txt\n")
         result = read_sha256_manifest(manifest_path)
@@ -433,6 +526,7 @@ class TestManifest:
     def test_read_manifest_skips_empty_lines(self, tmp_path):
         """Covers line 55: empty lines skipped in read_sha256_manifest."""
         from omnibioai_model_registry.package.manifest import read_sha256_manifest
+
         manifest_path = tmp_path / "sha256sums.txt"
         manifest_path.write_text(
             "\n"
@@ -448,8 +542,10 @@ class TestManifest:
 
     def test_verify_manifest_passes(self, tmp_path):
         from omnibioai_model_registry.package.manifest import (
-            write_sha256_manifest, verify_sha256_manifest
+            write_sha256_manifest,
+            verify_sha256_manifest,
         )
+
         (tmp_path / "model.pt").write_bytes(b"weights")
         manifest_path = tmp_path / "sha256sums.txt"
         write_sha256_manifest(tmp_path, manifest_path, include_files=["model.pt"])
@@ -458,6 +554,7 @@ class TestManifest:
     def test_verify_manifest_missing_file_raises(self, tmp_path):
         """Covers line 74: file expected by manifest is missing."""
         from omnibioai_model_registry.package.manifest import verify_sha256_manifest
+
         manifest_path = tmp_path / "sha256sums.txt"
         manifest_path.write_text("abc123  model.pt\n")
         with pytest.raises(IntegrityError) as exc_info:
@@ -466,6 +563,7 @@ class TestManifest:
 
     def test_verify_manifest_hash_mismatch_raises(self, tmp_path):
         from omnibioai_model_registry.package.manifest import verify_sha256_manifest
+
         (tmp_path / "model.pt").write_bytes(b"different content")
         manifest_path = tmp_path / "sha256sums.txt"
         manifest_path.write_text(
@@ -480,10 +578,12 @@ class TestManifest:
 # storage/localfs.py
 # ============================================================
 
+
 class TestLocalFS:
 
     def test_ensure_dirs(self, tmp_path):
         from omnibioai_model_registry.storage.localfs import LocalFS
+
         fs = LocalFS()
         new_dir = tmp_path / "a" / "b" / "c"
         fs.ensure_dirs(new_dir)
@@ -491,12 +591,14 @@ class TestLocalFS:
 
     def test_exists_true_false(self, tmp_path):
         from omnibioai_model_registry.storage.localfs import LocalFS
+
         fs = LocalFS()
         assert fs.exists(tmp_path) is True
         assert fs.exists(tmp_path / "nonexistent") is False
 
     def test_copy_tree(self, tmp_path):
         from omnibioai_model_registry.storage.localfs import LocalFS
+
         fs = LocalFS()
         src = tmp_path / "src"
         src.mkdir()
@@ -507,6 +609,7 @@ class TestLocalFS:
 
     def test_atomic_write_text(self, tmp_path):
         from omnibioai_model_registry.storage.localfs import LocalFS
+
         fs = LocalFS()
         target = tmp_path / "output.txt"
         fs.atomic_write_text(target, "hello world")
@@ -515,6 +618,7 @@ class TestLocalFS:
     def test_atomic_write_creates_parent_dirs(self, tmp_path):
         """Covers lines 31-33: parent.mkdir inside atomic_write_text."""
         from omnibioai_model_registry.storage.localfs import LocalFS
+
         fs = LocalFS()
         target = tmp_path / "deep" / "nested" / "file.txt"
         fs.atomic_write_text(target, "content")
@@ -522,6 +626,7 @@ class TestLocalFS:
 
     def test_atomic_write_overwrites(self, tmp_path):
         from omnibioai_model_registry.storage.localfs import LocalFS
+
         fs = LocalFS()
         target = tmp_path / "file.txt"
         fs.atomic_write_text(target, "first")
@@ -532,30 +637,37 @@ class TestLocalFS:
         """Covers localfs.py line 32: os.unlink(tmp) called when replace fails."""
         import omnibioai_model_registry.storage.localfs as lfs_mod
         from omnibioai_model_registry.storage.localfs import LocalFS
+
         fs = LocalFS()
         target = tmp_path / "file.txt"
         monkeypatch.setattr(
-            lfs_mod.os, "replace",
-            lambda src, dst: (_ for _ in ()).throw(OSError("fail"))
+            lfs_mod.os,
+            "replace",
+            lambda src, dst: (_ for _ in ()).throw(OSError("fail")),
         )
         with pytest.raises(OSError):
             fs.atomic_write_text(target, "content")
         leftover = list(tmp_path.glob("file.txt.*"))
         assert leftover == []
 
-    def test_atomic_write_cleanup_unlink_exception_suppressed(self, tmp_path, monkeypatch):
+    def test_atomic_write_cleanup_unlink_exception_suppressed(
+        self, tmp_path, monkeypatch
+    ):
         """Covers localfs.py line 33: pass — exception in os.unlink is suppressed."""
         import omnibioai_model_registry.storage.localfs as lfs_mod
         from omnibioai_model_registry.storage.localfs import LocalFS
+
         fs = LocalFS()
         target = tmp_path / "file.txt"
         monkeypatch.setattr(
-            lfs_mod.os, "replace",
-            lambda src, dst: (_ for _ in ()).throw(OSError("replace fail"))
+            lfs_mod.os,
+            "replace",
+            lambda src, dst: (_ for _ in ()).throw(OSError("replace fail")),
         )
         monkeypatch.setattr(
-            lfs_mod.os, "unlink",
-            lambda p: (_ for _ in ()).throw(OSError("unlink fail"))
+            lfs_mod.os,
+            "unlink",
+            lambda p: (_ for _ in ()).throw(OSError("unlink fail")),
         )
         with pytest.raises(OSError, match="replace fail"):
             fs.atomic_write_text(target, "content")
@@ -565,16 +677,24 @@ class TestLocalFS:
 # audit/audit_log.py
 # ============================================================
 
+
 class TestAuditLog:
 
     def test_append_and_read_promotion_event(self, tmp_path):
         from omnibioai_model_registry.audit.audit_log import (
-            PromotionEvent, append_promotion_event, now_utc_iso
+            PromotionEvent,
+            append_promotion_event,
+            now_utc_iso,
         )
+
         log_path = tmp_path / "promotions.jsonl"
         ev = PromotionEvent(
-            task="t", model_name="m", alias="production",
-            version="v1", actor="x", reason="y",
+            task="t",
+            model_name="m",
+            alias="production",
+            version="v1",
+            actor="x",
+            reason="y",
             ts_utc=now_utc_iso(),
         )
         append_promotion_event(log_path, ev)
@@ -586,13 +706,20 @@ class TestAuditLog:
 
     def test_append_multiple_events(self, tmp_path):
         from omnibioai_model_registry.audit.audit_log import (
-            PromotionEvent, append_promotion_event, now_utc_iso
+            PromotionEvent,
+            append_promotion_event,
+            now_utc_iso,
         )
+
         log_path = tmp_path / "promotions.jsonl"
         for i in range(3):
             ev = PromotionEvent(
-                task="t", model_name="m", alias=f"alias_{i}",
-                version=f"v{i}", actor="x", reason="y",
+                task="t",
+                model_name="m",
+                alias=f"alias_{i}",
+                version=f"v{i}",
+                actor="x",
+                reason="y",
                 ts_utc=now_utc_iso(),
             )
             append_promotion_event(log_path, ev)
@@ -601,6 +728,7 @@ class TestAuditLog:
 
     def test_now_utc_iso_format(self):
         from omnibioai_model_registry.audit.audit_log import now_utc_iso
+
         ts = now_utc_iso()
         assert "T" in ts
         assert ts.endswith("Z") or "+00:00" in ts or "UTC" in ts
@@ -609,6 +737,7 @@ class TestAuditLog:
 # ============================================================
 # api.py — additional coverage
 # ============================================================
+
 
 class TestAPIAdditional:
 
@@ -628,24 +757,40 @@ class TestAPIAdditional:
         reg = ModelRegistry.from_env()
         with pytest.raises(ModelNotFound):
             reg.promote_model(
-                task="t", model_name="m", alias="prod",
-                version="nonexistent", actor="x", reason="y"
+                task="t",
+                model_name="m",
+                alias="prod",
+                version="nonexistent",
+                actor="x",
+                reason="y",
             )
 
     def test_verify_model_ref(self, env_root, tmp_path):
         src = tmp_path / "src"
         _make_minimal_package(src)
         reg = ModelRegistry.from_env()
-        reg.register_model(task="t", model_name="m", version="v1",
-                           artifacts_dir=src, metadata={}, set_alias=None)
+        reg.register_model(
+            task="t",
+            model_name="m",
+            version="v1",
+            artifacts_dir=src,
+            metadata={},
+            set_alias=None,
+        )
         reg.verify_model_ref(task="t", model_ref="m@v1")
 
     def test_resolve_model_no_verify(self, env_root, tmp_path):
         src = tmp_path / "src"
         _make_minimal_package(src)
         reg = ModelRegistry.from_env()
-        reg.register_model(task="t", model_name="m", version="v1",
-                           artifacts_dir=src, metadata={}, set_alias=None)
+        reg.register_model(
+            task="t",
+            model_name="m",
+            version="v1",
+            artifacts_dir=src,
+            metadata={},
+            set_alias=None,
+        )
         vdir = reg.resolve_model(task="t", model_ref="m@v1", verify=False)
         assert vdir.exists()
 
@@ -654,9 +799,14 @@ class TestAPIAdditional:
         _make_minimal_package(src)
         reg = ModelRegistry.from_env()
         out = reg.register_model(
-            task="t", model_name="m", version="v1",
-            artifacts_dir=src, metadata={},
-            set_alias="latest", actor="manish", reason="ci",
+            task="t",
+            model_name="m",
+            version="v1",
+            artifacts_dir=src,
+            metadata={},
+            set_alias="latest",
+            actor="manish",
+            reason="ci",
         )
         assert out["alias_set"] == "latest"
 
@@ -664,26 +814,46 @@ class TestAPIAdditional:
         src = tmp_path / "src"
         _make_minimal_package(src)
         reg = ModelRegistry.from_env()
-        out = reg.register_model(task="t", model_name="m", version="v1",
-                                 artifacts_dir=src, metadata={}, set_alias=None)
+        out = reg.register_model(
+            task="t",
+            model_name="m",
+            version="v1",
+            artifacts_dir=src,
+            metadata={},
+            set_alias=None,
+        )
         assert out["alias_set"] is None
 
     def test_module_level_register_model(self, env_root, tmp_path):
         """Covers module-level register_model function."""
         import omnibioai_model_registry.api as api_mod
+
         src = tmp_path / "src"
         _make_minimal_package(src)
-        out = api_mod.register_model(task="t", model_name="m", version="v1",
-                                     artifacts_dir=src, metadata={}, set_alias=None)
+        out = api_mod.register_model(
+            task="t",
+            model_name="m",
+            version="v1",
+            artifacts_dir=src,
+            metadata={},
+            set_alias=None,
+        )
         assert out["ok"] is True
 
     def test_module_level_resolve_model(self, env_root, tmp_path):
         """Covers module-level resolve_model function."""
         import omnibioai_model_registry.api as api_mod
+
         src = tmp_path / "src"
         _make_minimal_package(src)
-        api_mod.register_model(task="t", model_name="m", version="v1",
-                               artifacts_dir=src, metadata={}, set_alias=None)
+        api_mod.register_model(
+            task="t",
+            model_name="m",
+            version="v1",
+            artifacts_dir=src,
+            metadata={},
+            set_alias=None,
+        )
         path_str = api_mod.resolve_model(task="t", model_ref="m@v1", verify=True)
         assert isinstance(path_str, str)
         assert Path(path_str).exists()
@@ -691,28 +861,54 @@ class TestAPIAdditional:
     def test_module_level_promote_model(self, env_root, tmp_path):
         """Covers module-level promote_model function."""
         import omnibioai_model_registry.api as api_mod
+
         src = tmp_path / "src"
         _make_minimal_package(src)
-        api_mod.register_model(task="t", model_name="m", version="v1",
-                               artifacts_dir=src, metadata={}, set_alias=None)
-        api_mod.promote_model(task="t", model_name="m", alias="staging",
-                              version="v1", actor="x", reason="y")
+        api_mod.register_model(
+            task="t",
+            model_name="m",
+            version="v1",
+            artifacts_dir=src,
+            metadata={},
+            set_alias=None,
+        )
+        api_mod.promote_model(
+            task="t",
+            model_name="m",
+            alias="staging",
+            version="v1",
+            actor="x",
+            reason="y",
+        )
 
     def test_module_level_verify_model_ref(self, env_root, tmp_path):
         """Covers module-level verify_model_ref function."""
         import omnibioai_model_registry.api as api_mod
+
         src = tmp_path / "src"
         _make_minimal_package(src)
-        api_mod.register_model(task="t", model_name="m", version="v1",
-                               artifacts_dir=src, metadata={}, set_alias=None)
+        api_mod.register_model(
+            task="t",
+            model_name="m",
+            version="v1",
+            artifacts_dir=src,
+            metadata={},
+            set_alias=None,
+        )
         api_mod.verify_model_ref(task="t", model_ref="m@v1")
 
     def test_hashes_returned_in_register(self, env_root, tmp_path):
         src = tmp_path / "src"
         _make_minimal_package(src)
         reg = ModelRegistry.from_env()
-        out = reg.register_model(task="t", model_name="m", version="v1",
-                                 artifacts_dir=src, metadata={}, set_alias=None)
+        out = reg.register_model(
+            task="t",
+            model_name="m",
+            version="v1",
+            artifacts_dir=src,
+            metadata={},
+            set_alias=None,
+        )
         assert isinstance(out["hashes"], dict)
         assert len(out["hashes"]) > 0
 
@@ -720,8 +916,14 @@ class TestAPIAdditional:
         src = tmp_path / "src"
         _make_minimal_package(src)
         reg = ModelRegistry.from_env()
-        reg.register_model(task="t", model_name="m", version="v1",
-                           artifacts_dir=src, metadata={}, set_alias=None)
+        reg.register_model(
+            task="t",
+            model_name="m",
+            version="v1",
+            artifacts_dir=src,
+            metadata={},
+            set_alias=None,
+        )
         reg.promote_model(task="t", model_name="m", alias="staging", version="v1")
         reg.promote_model(task="t", model_name="m", alias="production", version="v1")
         staging = json.loads(
@@ -738,10 +940,12 @@ class TestAPIAdditional:
 # cli/main.py — covered via runpy
 # ============================================================
 
+
 class TestCLIMain:
 
     def _get_cli_path(self):
         import omnibioai_model_registry.cli.main as cli_mod
+
         return cli_mod.__file__
 
     def _run_cli(self, monkeypatch, argv):
@@ -752,90 +956,194 @@ class TestCLIMain:
         src = tmp_path / f"src_{model}_{version}"
         _make_minimal_package(src)
         reg = ModelRegistry.from_env()
-        reg.register_model(task="t", model_name=model, version=version,
-                           artifacts_dir=src, metadata={}, set_alias=None)
+        reg.register_model(
+            task="t",
+            model_name=model,
+            version=version,
+            artifacts_dir=src,
+            metadata={},
+            set_alias=None,
+        )
         return src
 
     def test_cli_register_plain(self, env_root, tmp_path, monkeypatch, capsys):
         src = tmp_path / "src"
         _make_minimal_package(src)
-        self._run_cli(monkeypatch, [
-            "omr", "register", "--task", "t", "--model", "m",
-            "--version", "v1", "--artifacts", str(src), "--set-alias", "latest",
-        ])
+        self._run_cli(
+            monkeypatch,
+            [
+                "omr",
+                "register",
+                "--task",
+                "t",
+                "--model",
+                "m",
+                "--version",
+                "v1",
+                "--artifacts",
+                str(src),
+                "--set-alias",
+                "latest",
+            ],
+        )
         out = capsys.readouterr()
         assert "Registered" in out.out or "v1" in out.out
 
     def test_cli_register_json_output(self, env_root, tmp_path, monkeypatch, capsys):
         src = tmp_path / "src"
         _make_minimal_package(src)
-        self._run_cli(monkeypatch, [
-            "omr", "register", "--task", "t", "--model", "m",
-            "--version", "v1", "--artifacts", str(src),
-            "--set-alias", "", "--json",
-        ])
+        self._run_cli(
+            monkeypatch,
+            [
+                "omr",
+                "register",
+                "--task",
+                "t",
+                "--model",
+                "m",
+                "--version",
+                "v1",
+                "--artifacts",
+                str(src),
+                "--set-alias",
+                "",
+                "--json",
+            ],
+        )
         out = capsys.readouterr()
         data = json.loads(out.out)
         assert data["ok"] is True
 
-    def test_cli_register_with_metadata_inline(self, env_root, tmp_path, monkeypatch, capsys):
+    def test_cli_register_with_metadata_inline(
+        self, env_root, tmp_path, monkeypatch, capsys
+    ):
         src = tmp_path / "src"
         _make_minimal_package(src)
-        self._run_cli(monkeypatch, [
-            "omr", "register", "--task", "t", "--model", "m2",
-            "--version", "v1", "--artifacts", str(src),
-            "--metadata-inline", '{"framework": "sklearn"}',
-        ])
+        self._run_cli(
+            monkeypatch,
+            [
+                "omr",
+                "register",
+                "--task",
+                "t",
+                "--model",
+                "m2",
+                "--version",
+                "v1",
+                "--artifacts",
+                str(src),
+                "--metadata-inline",
+                '{"framework": "sklearn"}',
+            ],
+        )
         out = capsys.readouterr()
         assert "Registered" in out.out or "m2" in out.out
 
-    def test_cli_register_with_metadata_json_file(self, env_root, tmp_path, monkeypatch, capsys):
+    def test_cli_register_with_metadata_json_file(
+        self, env_root, tmp_path, monkeypatch, capsys
+    ):
         src = tmp_path / "src"
         _make_minimal_package(src)
         meta_file = tmp_path / "meta.json"
         meta_file.write_text(json.dumps({"framework": "pytorch"}))
-        self._run_cli(monkeypatch, [
-            "omr", "register", "--task", "t", "--model", "m3",
-            "--version", "v1", "--artifacts", str(src),
-            "--metadata-json", str(meta_file),
-        ])
+        self._run_cli(
+            monkeypatch,
+            [
+                "omr",
+                "register",
+                "--task",
+                "t",
+                "--model",
+                "m3",
+                "--version",
+                "v1",
+                "--artifacts",
+                str(src),
+                "--metadata-json",
+                str(meta_file),
+            ],
+        )
         out = capsys.readouterr()
         assert "Registered" in out.out or "m3" in out.out
 
-    def test_cli_register_metadata_json_missing_raises(self, env_root, tmp_path, monkeypatch):
+    def test_cli_register_metadata_json_missing_raises(
+        self, env_root, tmp_path, monkeypatch
+    ):
         src = tmp_path / "src"
         _make_minimal_package(src)
         with pytest.raises(SystemExit) as exc_info:
-            self._run_cli(monkeypatch, [
-                "omr", "register", "--task", "t", "--model", "m4",
-                "--version", "v1", "--artifacts", str(src),
-                "--metadata-json", "/nonexistent/meta.json",
-            ])
+            self._run_cli(
+                monkeypatch,
+                [
+                    "omr",
+                    "register",
+                    "--task",
+                    "t",
+                    "--model",
+                    "m4",
+                    "--version",
+                    "v1",
+                    "--artifacts",
+                    str(src),
+                    "--metadata-json",
+                    "/nonexistent/meta.json",
+                ],
+            )
         assert exc_info.value.code in (1, 2)
 
     def test_cli_resolve(self, env_root, tmp_path, monkeypatch, capsys):
         self._register_via_api(env_root, tmp_path)
-        self._run_cli(monkeypatch, [
-            "omr", "resolve", "--task", "t", "--ref", "m@v1",
-        ])
+        self._run_cli(
+            monkeypatch,
+            [
+                "omr",
+                "resolve",
+                "--task",
+                "t",
+                "--ref",
+                "m@v1",
+            ],
+        )
         out = capsys.readouterr()
         assert "v1" in out.out or str(env_root) in out.out
 
     def test_cli_promote(self, env_root, tmp_path, monkeypatch, capsys):
         self._register_via_api(env_root, tmp_path)
-        self._run_cli(monkeypatch, [
-            "omr", "promote", "--task", "t", "--model", "m",
-            "--alias", "production", "--version", "v1",
-            "--actor", "manish", "--reason", "release",
-        ])
+        self._run_cli(
+            monkeypatch,
+            [
+                "omr",
+                "promote",
+                "--task",
+                "t",
+                "--model",
+                "m",
+                "--alias",
+                "production",
+                "--version",
+                "v1",
+                "--actor",
+                "manish",
+                "--reason",
+                "release",
+            ],
+        )
         out = capsys.readouterr()
         assert "production" in out.out or "Promoted" in out.out
 
     def test_cli_verify(self, env_root, tmp_path, monkeypatch, capsys):
         self._register_via_api(env_root, tmp_path)
-        self._run_cli(monkeypatch, [
-            "omr", "verify", "--task", "t", "--ref", "m@v1",
-        ])
+        self._run_cli(
+            monkeypatch,
+            [
+                "omr",
+                "verify",
+                "--task",
+                "t",
+                "--ref",
+                "m@v1",
+            ],
+        )
         out = capsys.readouterr()
         assert "passed" in out.out or out.out.strip() != ""
 
@@ -855,10 +1163,13 @@ class TestCLIMain:
         _make_minimal_package(src)
         reg = ModelRegistry.from_env()
         reg.register_model(
-            task="t", model_name="m", version="v1",
+            task="t",
+            model_name="m",
+            version="v1",
             artifacts_dir=src,
             metadata={
-                "framework": "sklearn", "model_type": "lr",
+                "framework": "sklearn",
+                "model_type": "lr",
                 "provenance": {
                     "git_commit": "abc123",
                     "training_data_ref": "gs://bucket/data",
@@ -875,12 +1186,26 @@ class TestCLIMain:
         src = tmp_path / "src"
         _make_minimal_package(src)
         reg = ModelRegistry.from_env()
-        reg.register_model(task="t", model_name="m", version="v1",
-                           artifacts_dir=src, metadata={"framework": "sklearn"},
-                           set_alias=None)
-        self._run_cli(monkeypatch, [
-            "omr", "show", "--task", "t", "--ref", "m@v1", "--json",
-        ])
+        reg.register_model(
+            task="t",
+            model_name="m",
+            version="v1",
+            artifacts_dir=src,
+            metadata={"framework": "sklearn"},
+            set_alias=None,
+        )
+        self._run_cli(
+            monkeypatch,
+            [
+                "omr",
+                "show",
+                "--task",
+                "t",
+                "--ref",
+                "m@v1",
+                "--json",
+            ],
+        )
         out = capsys.readouterr()
         data = json.loads(out.out)
         assert data["framework"] == "sklearn"
@@ -889,12 +1214,26 @@ class TestCLIMain:
         src = tmp_path / "src"
         _make_minimal_package(src)
         reg = ModelRegistry.from_env()
-        reg.register_model(task="t", model_name="m", version="v1",
-                           artifacts_dir=src, metadata={"framework": "sklearn"},
-                           set_alias=None)
-        self._run_cli(monkeypatch, [
-            "omr", "show", "--task", "t", "--ref", "m@v1", "--raw",
-        ])
+        reg.register_model(
+            task="t",
+            model_name="m",
+            version="v1",
+            artifacts_dir=src,
+            metadata={"framework": "sklearn"},
+            set_alias=None,
+        )
+        self._run_cli(
+            monkeypatch,
+            [
+                "omr",
+                "show",
+                "--task",
+                "t",
+                "--ref",
+                "m@v1",
+                "--raw",
+            ],
+        )
         out = capsys.readouterr()
         assert "sklearn" in out.out
 
@@ -905,9 +1244,17 @@ class TestCLIMain:
 
     def test_cli_registry_error_exits_1(self, env_root, monkeypatch):
         with pytest.raises(SystemExit) as exc_info:
-            self._run_cli(monkeypatch, [
-                "omr", "resolve", "--task", "t", "--ref", "nonexistent@v1",
-            ])
+            self._run_cli(
+                monkeypatch,
+                [
+                    "omr",
+                    "resolve",
+                    "--task",
+                    "t",
+                    "--ref",
+                    "nonexistent@v1",
+                ],
+            )
         assert exc_info.value.code == 1
 
     def test_cli_set_alias_empty_string_becomes_none(
@@ -916,31 +1263,50 @@ class TestCLIMain:
         """Covers main(): set_alias == '' → None branch."""
         src = tmp_path / "src"
         _make_minimal_package(src)
-        self._run_cli(monkeypatch, [
-            "omr", "register", "--task", "t", "--model", "m_noalias",
-            "--version", "v1", "--artifacts", str(src), "--set-alias", "",
-        ])
+        self._run_cli(
+            monkeypatch,
+            [
+                "omr",
+                "register",
+                "--task",
+                "t",
+                "--model",
+                "m_noalias",
+                "--version",
+                "v1",
+                "--artifacts",
+                str(src),
+                "--set-alias",
+                "",
+            ],
+        )
         out = capsys.readouterr()
         assert "Registered" in out.out or "m_noalias" in out.out
 
-    def test_cli_show_missing_meta_exits_1(self, env_root, tmp_path, monkeypatch, capsys):
+    def test_cli_show_missing_meta_exits_1(
+        self, env_root, tmp_path, monkeypatch, capsys
+    ):
         """Covers cli/main.py lines 92-93: model_meta.json missing → sys.exit(1)."""
         from omnibioai_model_registry.package import layout as L
 
         src = tmp_path / "src"
         _make_minimal_package(src)
         reg = ModelRegistry.from_env()
-        reg.register_model(task="t", model_name="m", version="v1",
-                           artifacts_dir=src, metadata={}, set_alias=None)
+        reg.register_model(
+            task="t",
+            model_name="m",
+            version="v1",
+            artifacts_dir=src,
+            metadata={},
+            set_alias=None,
+        )
         vdir = L.version_dir(reg.root, "t", "m", "v1")
 
         monkeypatch.setattr(
-            "omnibioai_model_registry.api.validate_package_files",
-            lambda *a, **kw: None
+            "omnibioai_model_registry.api.validate_package_files", lambda *a, **kw: None
         )
         monkeypatch.setattr(
-            "omnibioai_model_registry.api.verify_sha256_manifest",
-            lambda *a, **kw: None
+            "omnibioai_model_registry.api.verify_sha256_manifest", lambda *a, **kw: None
         )
         (vdir / "model_meta.json").unlink()
 

@@ -8,4 +8,6 @@ from ..errors import ValidationError
 def validate_package_files(version_dir: Path) -> None:
     missing = [f for f in REQUIRED_FILES if not (version_dir / f).exists()]
     if missing:
-        raise ValidationError(f"Model package missing required files: {missing}. In: {version_dir}")
+        raise ValidationError(
+            f"Model package missing required files: {missing}. In: {version_dir}"
+        )

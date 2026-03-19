@@ -12,12 +12,18 @@ class RegistryConfig:
 
 
 def load_config() -> RegistryConfig:
-    root = (os.getenv("OMNIBIOAI_MODEL_REGISTRY_ROOT") or os.getenv("REGISTRY_ROOT") or "").strip()
+    root = (
+        os.getenv("OMNIBIOAI_MODEL_REGISTRY_ROOT") or os.getenv("REGISTRY_ROOT") or ""
+    ).strip()
     if not root:
         raise RegistryNotConfigured(
             "OMNIBIOAI_MODEL_REGISTRY_ROOT is not set. "
             "Example: export OMNIBIOAI_MODEL_REGISTRY_ROOT=~/Desktop/machine/local_registry/model_registry"
         )
-    backend = os.getenv("OMNIBIOAI_MODEL_REGISTRY_BACKEND", "localfs").strip() or "localfs"
-    strict_verify = os.getenv("OMNIBIOAI_MODEL_REGISTRY_STRICT_VERIFY", "1").strip() not in {"0", "false", "False"}
+    backend = (
+        os.getenv("OMNIBIOAI_MODEL_REGISTRY_BACKEND", "localfs").strip() or "localfs"
+    )
+    strict_verify = os.getenv(
+        "OMNIBIOAI_MODEL_REGISTRY_STRICT_VERIFY", "1"
+    ).strip() not in {"0", "false", "False"}
     return RegistryConfig(root=root, backend=backend, strict_verify=strict_verify)

@@ -25,18 +25,22 @@ DEFAULT_PREFIX = "/v1"
 app = FastAPI(title="OmniBioAI Model Registry Service", version=APP_VERSION)
 
 
-
 # -------------------------
 # Request/Response models
 # -------------------------
+
 
 class RegisterRequest(BaseModel):
     task: str
     model_name: str
     version: str
-    artifacts_dir: str = Field(..., description="Directory path accessible to the service container")
+    artifacts_dir: str = Field(
+        ..., description="Directory path accessible to the service container"
+    )
     metadata: Dict[str, Any] = Field(default_factory=dict)
-    set_alias: Optional[str] = Field(default="latest", description="Alias to set after register. Use null to skip.")
+    set_alias: Optional[str] = Field(
+        default="latest", description="Alias to set after register. Use null to skip."
+    )
     actor: Optional[str] = None
     reason: Optional[str] = "api register"
 
@@ -83,8 +87,11 @@ class ShowResponse(BaseModel):
 # Helpers
 # -------------------------
 
+
 def _registry_root() -> str:
-    return (os.getenv("OMNIBIOAI_MODEL_REGISTRY_ROOT") or os.getenv("REGISTRY_ROOT") or "").strip()
+    return (
+        os.getenv("OMNIBIOAI_MODEL_REGISTRY_ROOT") or os.getenv("REGISTRY_ROOT") or ""
+    ).strip()
 
 
 def _http_error(status: int, msg: str):
@@ -100,6 +107,7 @@ def _handle_registry_error(e: Exception):
 # -------------------------
 # Endpoints
 # -------------------------
+
 
 @app.get("/health")
 def health():
