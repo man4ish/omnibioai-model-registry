@@ -11,7 +11,7 @@ It provides:
 - **Deterministic resolution by stable reference** (`model@alias` or `model@version`)
 - **Local-first design** with a clean path to future backends (S3/Azure/on-prem)
 
-The registry is implemented as a **standalone Python library** and includes:
+iThe registry is implemented as a **standalone Python library** and includes:
 - a **CLI** (`omr`)
 - a **minimal REST service** (FastAPI)
 

@@ -12,7 +12,7 @@ class RegistryConfig:
 
 
 def load_config() -> RegistryConfig:
-    root = os.getenv("OMNIBIOAI_MODEL_REGISTRY_ROOT", "").strip()
+    root = (os.getenv("OMNIBIOAI_MODEL_REGISTRY_ROOT") or os.getenv("REGISTRY_ROOT") or "").strip()
     if not root:
         raise RegistryNotConfigured(
             "OMNIBIOAI_MODEL_REGISTRY_ROOT is not set. "

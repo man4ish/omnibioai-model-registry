@@ -4,6 +4,7 @@
 __pycache__/
 *.py[cod]
 *$py.class
+*.pyd
 
 # C extensions
 *.so
@@ -17,9 +18,8 @@ dist/
 .eggs/
 *.egg
 MANIFEST
-
-# Editable installs
 pip-wheel-metadata/
+share/python-wheels/
 
 # ===============================
 # Virtual environments
@@ -30,6 +30,7 @@ env/
 ENV/
 .env
 .env.*
+!.env.example
 
 # ===============================
 # Testing / Coverage
@@ -38,9 +39,21 @@ ENV/
 .coverage
 .coverage.*
 htmlcov/
+coverage.xml
 .tox/
+.nox/
 .mypy_cache/
 .ruff_cache/
+.pytype/
+nosetests.xml
+test-results/
+
+# ===============================
+# Type checking
+# ===============================
+.dmypy.json
+dmypy.json
+.pyre/
 
 # ===============================
 # IDEs / Editors
@@ -49,12 +62,17 @@ htmlcov/
 .idea/
 *.swp
 *.swo
+*~
 .DS_Store
+Thumbs.db
 
 # ===============================
 # Logs
 # ===============================
 *.log
+*.tmp
+*.bak
+*.orig
 
 # ===============================
 # Local registry data (IMPORTANT)
@@ -63,13 +81,42 @@ htmlcov/
 local_registry/
 registry_root/
 model_registry/
-
-# If you ever keep sample model packages locally
 /tmp_model_pkg/
 model_pkg/
+
+# Model artifact files — never commit binaries
+*.pt
+*.pth
+*.onnx
+*.pkl
+*.joblib
+*.faiss
+*.bin
+*.safetensors
+
+# ===============================
+# Secrets & credentials
+# ===============================
+*.pem
+*.key
+*.crt
+secrets/
+.secrets
+
+# ===============================
+# Docker
+# ===============================
+.dockerignore
+
+# ===============================
+# Jupyter
+# ===============================
+.ipynb_checkpoints/
+*.ipynb
 
 # ===============================
 # OS files
 # ===============================
 Thumbs.db
-
+ehthumbs.db
+Desktop.ini

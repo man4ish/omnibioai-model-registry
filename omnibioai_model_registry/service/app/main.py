@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+from importlib.metadata import version as pkg_version
 from pathlib import Path
 from typing import Any, Dict, Optional
 
@@ -17,10 +18,12 @@ from omnibioai_model_registry import (
 )
 from omnibioai_model_registry.errors import ModelRegistryError
 
-APP_VERSION = "0.1.0"
+# Keep API version in sync with the installed package version (pyproject.toml)
+APP_VERSION = pkg_version("omnibioai-model-registry")
 DEFAULT_PREFIX = "/v1"
 
 app = FastAPI(title="OmniBioAI Model Registry Service", version=APP_VERSION)
+
 
 
 # -------------------------
@@ -81,7 +84,7 @@ class ShowResponse(BaseModel):
 # -------------------------
 
 def _registry_root() -> str:
-    return os.getenv("OMNIBIOAI_MODEL_REGISTRY_ROOT", "").strip()
+    return (os.getenv("OMNIBIOAI_MODEL_REGISTRY_ROOT") or os.getenv("REGISTRY_ROOT") or "").strip()
 
 
 def _http_error(status: int, msg: str):
