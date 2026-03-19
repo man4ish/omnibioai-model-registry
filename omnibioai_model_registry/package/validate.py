@@ -1,8 +1,10 @@
 # File: omnibioai_model_registry/package/validate.py
 from __future__ import annotations
+
 from pathlib import Path
-from .layout import REQUIRED_FILES
+
 from ..errors import ValidationError
+from .layout import REQUIRED_FILES
 
 
 def validate_package_files(version_dir: Path) -> None:

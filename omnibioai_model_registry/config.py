@@ -1,6 +1,7 @@
 # File: omnibioai_model_registry/config.py
 import os
 from dataclasses import dataclass
+
 from .errors import RegistryNotConfigured
 
 

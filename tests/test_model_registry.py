@@ -15,12 +15,12 @@ import pytest
 
 from omnibioai_model_registry.api import ModelRegistry
 from omnibioai_model_registry.errors import (
-    VersionAlreadyExists,
-    ModelNotFound,
-    ValidationError,
-    InvalidModelRef,
     IntegrityError,
+    InvalidModelRef,
+    ModelNotFound,
     RegistryNotConfigured,
+    ValidationError,
+    VersionAlreadyExists,
 )
 from omnibioai_model_registry.package.layout import REQUIRED_FILES
 
@@ -323,12 +323,12 @@ class TestErrors:
 
     def test_all_error_types(self):
         from omnibioai_model_registry.errors import (
-            ModelNotFound,
-            VersionAlreadyExists,
-            ValidationError,
             IntegrityError,
             InvalidModelRef,
+            ModelNotFound,
             RegistryNotConfigured,
+            ValidationError,
+            VersionAlreadyExists,
         )
 
         for cls in [
@@ -457,8 +457,8 @@ class TestManifest:
 
     def test_write_and_read_manifest(self, tmp_path):
         from omnibioai_model_registry.package.manifest import (
-            write_sha256_manifest,
             read_sha256_manifest,
+            write_sha256_manifest,
         )
 
         (tmp_path / "model.pt").write_bytes(b"weights")
@@ -541,8 +541,8 @@ class TestManifest:
 
     def test_verify_manifest_passes(self, tmp_path):
         from omnibioai_model_registry.package.manifest import (
-            write_sha256_manifest,
             verify_sha256_manifest,
+            write_sha256_manifest,
         )
 
         (tmp_path / "model.pt").write_bytes(b"weights")

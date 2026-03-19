@@ -1,5 +1,6 @@
 # File: omnibioai_model_registry/audit/audit_log.py
 from __future__ import annotations
+
 import json
 from dataclasses import dataclass
 from datetime import datetime, timezone

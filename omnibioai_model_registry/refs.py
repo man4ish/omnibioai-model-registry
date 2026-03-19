@@ -1,5 +1,6 @@
 # File: omnibioai_model_registry/refs.py
 from dataclasses import dataclass
+
 from .errors import InvalidModelRef
 
 

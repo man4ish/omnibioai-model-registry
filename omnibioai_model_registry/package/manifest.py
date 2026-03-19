@@ -1,8 +1,10 @@
 # File: omnibioai_model_registry/package/manifest.py
 from __future__ import annotations
+
 import hashlib
 from pathlib import Path
 from typing import Dict
+
 from ..errors import IntegrityError
 
 

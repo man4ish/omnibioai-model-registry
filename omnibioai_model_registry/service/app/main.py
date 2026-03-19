@@ -11,9 +11,9 @@ from pydantic import BaseModel, Field
 
 from omnibioai_model_registry import (
     ModelRegistry,
+    promote_model,
     register_model,
     resolve_model,
-    promote_model,
     verify_model_ref,
 )
 from omnibioai_model_registry.errors import ModelRegistryError
