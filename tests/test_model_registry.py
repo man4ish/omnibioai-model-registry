@@ -24,7 +24,6 @@ from omnibioai_model_registry.errors import (
 )
 from omnibioai_model_registry.package.layout import REQUIRED_FILES
 
-
 # ============================================================
 # Shared helpers
 # ============================================================
