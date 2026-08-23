@@ -1,6 +1,8 @@
 # OmniBioAI ModelHub
 
-**OmniBioAI ModelHub** is a production-grade experiment tracking and model lifecycle management system for AI/ML models within the OmniBioAI ecosystem — purpose-built for biomedical AI plugins.
+> README last reviewed: **2026-08-23**
+
+**OmniBioAI ModelHub** is a production-oriented experiment tracking and model lifecycle management system for AI/ML models within the OmniBioAI ecosystem — purpose-built for biomedical AI plugins.
 
 It provides:
 
@@ -28,7 +30,7 @@ The registry is implemented as a **standalone Python library** (package name: `o
 - ✅ MySQL-backed metric + param storage
 - ✅ Immutable and verifiable model storage
 - ✅ Audit-ready promotion workflow
-- ✅ 22 REST endpoints (tracking + registry + governance + Hugging Face push)
+- ✅ 24 `/v1` REST endpoints (tracking + registry + governance + Hugging Face push), plus `/health`
 - ✅ 13 CLI commands
 - ✅ IAM-gated reads and writes (`model.use` permission, `omnibioai-iam-client`, enforced independently at the registry)
 - ✅ Usage metering + cross-service audit emission
@@ -159,7 +161,7 @@ latest → staging → production
 All promotions are explicit, append-only, and audited (`audit/promotions.jsonl`).
 
 ### 5) Storage Abstraction
-v0.2.0 supports a **local filesystem backend** (`localfs`) with a MySQL-backed tracking layer. S3 / Azure Blob backends are on the roadmap.
+v0.1.4 supports a **local filesystem backend** (`localfs`) with a MySQL-backed tracking layer. S3 / Azure Blob backends are on the roadmap.
 
 ---
 
@@ -260,8 +262,8 @@ python -m build
 
 Artifacts are written to `dist/`:
 
-- `dist/omnibioai_model_registry-0.2.0-py3-none-any.whl`
-- `dist/omnibioai_model_registry-0.2.0.tar.gz`
+- `dist/omnibioai_model_registry-0.1.4-py3-none-any.whl`
+- `dist/omnibioai_model_registry-0.1.4.tar.gz`
 
 Install the wheel:
 
@@ -969,6 +971,11 @@ pip install -e ".[dev]"
 pytest -q
 ```
 
+The current checkout collects **562 tests**. The configured coverage gate is
+**95%**; at the last README review, the suite reported **16.08% coverage** and
+did not meet that gate. Treat coverage as work in progress and verify the
+result locally before describing a build as release-ready.
+
 ---
 
 ## Relationship to OmniBioAI Ecosystem
@@ -990,7 +997,7 @@ The **ModelHub** provides the AI artifact governance layer shared by all.
 
 ## Roadmap
 
-### Done (v0.2.0)
+### Delivered in the current package line (v0.1.4)
 
 - Experiment tracking with `RunLogger` + `PluginRunClient`
 - MySQL-backed run/metric/param/tag storage
